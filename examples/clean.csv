@@ -1,0 +1,4 @@
+ID,Type,SKU,Name,Published,Short description,Description,Regular price,Sale price,Categories,Images,GTIN
+201,simple,WID-101,Blue Widget,1,A sturdy blue widget for everyday use.,"This sturdy blue widget is built for everyday use around the home and the workshop, with a solid steel body and a comfortable grip that lasts for years.",19.99,,Tools > Widgets,https://example.com/images/blue-widget.jpg,5901234123457
+202,simple,WID-102,Red Gadget,1,A handy red gadget for the kitchen.,"This handy red gadget is built for everyday use in the kitchen, with a solid steel body and a comfortable grip that lasts for years.",29.99,24.99,Tools,https://example.com/images/red-gadget.jpg,036000291452
+203,simple,WID-103,Green Case,1,A tough green case for shipping.,"This tough green case protects goods in shipping, with thick walls and a tight lid that keeps everything safe for years.",14.50,,Tools,https://example.com/images/green-case.jpg,15901234123454

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "woo-product-doctor"
+version = "1.0.0"
+description = "Offline WooCommerce products CSV audit CLI: duplicate SKUs, missing images, thin descriptions, bad prices, invalid GTINs, uncategorised products, variation price gaps"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+[project.scripts]
+woo-product-doctor = "woo_product_doctor:main"
+
+[tool.setuptools]
+py-modules = ["woo_product_doctor"]

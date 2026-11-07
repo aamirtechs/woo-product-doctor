@@ -1,0 +1,18 @@
+ID,Type,SKU,Name,Published,Short description,Description,Regular price,Sale price,Categories,Images,GTIN
+101,simple,WID-001,Blue Widget,1,A sturdy blue widget for everyday use.,"This sturdy blue widget is built for everyday use around the home and the workshop, with a solid steel body and a comfortable grip that lasts for years.",19.99,,Tools > Widgets,https://example.com/images/blue-widget.jpg,5901234123457
+102,simple,WID-002,Red Gadget,1,A handy red gadget.,Short text here only a few words.,29.99,,Tools,https://example.com/images/red-gadget.jpg,036000291452
+103,simple,WID-001,Blue Widget Copy,1,Another blue widget.,"This is another blue widget with a full description that is long enough to pass the word threshold without any trouble at all for the store owner.",24.99,,Tools,https://example.com/images/blue-widget-copy.jpg,96385074
+104,simple,,Green Thing,1,A green thing.,"This green thing is a perfectly ordinary product with a description long enough to pass every check in the book today.",9.99,,Tools,https://example.com/images/green-thing.jpg,
+105,simple,WID-005,Yellow Doohickey,1,A yellow doohickey.,"This yellow doohickey is a fine product with a description that is long enough to pass the word threshold without any trouble.",,,Tools,https://example.com/images/yellow.jpg,
+106,simple,WID-006,Purple Gizmo,1,A purple gizmo.,"This purple gizmo is a fine product with a description that is long enough to pass the word threshold without any trouble.",0.00,,Tools,https://example.com/images/purple.jpg,
+107,simple,WID-007,Orange Widget,1,An orange widget.,"This orange widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",15.00,19.99,Tools,https://example.com/images/orange.jpg,
+108,simple,WID-008,Black Gadget,1,A black gadget.,"This black gadget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,,
+109,simple,WID-009,White Widget,1,A white widget.,"This white widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/woocommerce-placeholder.png,
+110,simple,WID-010,Grey Gizmo,1,,,12.50,,Tools,https://example.com/images/grey.jpg,
+111,simple,WID-011,Pink Thing,1,A pink thing.,"This pink thing is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,,https://example.com/images/pink.jpg,
+112,simple,WID-012,Brown Gadget,1,A brown gadget.,"This brown gadget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/brown.jpg,5901234123456
+113,simple,WID-013,Silver Widget,1,A silver widget.,"This silver widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/silver.jpg,5901234123457
+114,variable,WID-014,T-Shirt,1,A plain t-shirt.,"This plain t-shirt is a fine product with a description that is long enough to pass the word threshold without any trouble.",,,Clothing,https://example.com/images/tshirt.jpg,
+115,variation,WID-014-S,T-Shirt - Small,1,,,,,,,
+116,variation,,T-Shirt - Medium,1,,,14.99,,,,
+117,simple,WID-017,Draft Product,0,A draft product.,Short.,12.50,,Tools,,
