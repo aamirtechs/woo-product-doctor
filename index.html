@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>woo-product-doctor by AamirTechs</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f6f8fb; color: #1c2733; }
+header { background: #0b1f3a; color: #ffffff; padding: 28px 20px 22px; border-bottom: 4px solid #d4a72c; }
+header .wrap, main, footer .wrap { max-width: 880px; margin: 0 auto; }
+header h1 { margin: 0 0 6px; font-size: 28px; }
+header p { margin: 0; color: #c9d6e8; font-size: 15px; }
+main { padding: 24px 20px 8px; }
+.card { background: #ffffff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(11, 31, 58, 0.12); }
+label { display: block; font-weight: 600; margin: 14px 0 6px; font-size: 14px; }
+label:first-child { margin-top: 0; }
+textarea { width: 100%; min-height: 180px; padding: 10px; border: 1px solid #c3cedd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+input[type="text"], input[type="number"], input[type="date"], select { padding: 8px 10px; border: 1px solid #c3cedd; border-radius: 8px; font-size: 14px; background: #ffffff; }
+.controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.controls .field label { margin-top: 0; }
+.checkline { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding-bottom: 9px; }
+.checkline input { width: 16px; height: 16px; }
+.buttons { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+button { border: 0; border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+button.primary { background: #0b1f3a; color: #ffffff; }
+button.primary:hover { background: #14315c; }
+button.secondary { background: #eef2f8; color: #0b1f3a; border: 1px solid #c3cedd; }
+button.accent { background: #d4a72c; color: #0b1f3a; }
+pre { background: #0b1f3a; color: #e8eef7; border-radius: 8px; padding: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 13px; min-height: 60px; }
+.hint { font-size: 13px; color: #5a6b82; margin-top: 6px; }
+footer { padding: 18px 20px 30px; color: #5a6b82; font-size: 13px; }
+footer a { color: #0b1f3a; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>woo-product-doctor</h1>
+    <p>Audit a WooCommerce products CSV export for duplicate SKUs, price problems and bad GTINs.</p>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <label for="file">Choose a file</label>
+    <input type="file" id="file" accept=".csv,text/csv,text/plain">
+    <label for="input">Or paste the products CSV export</label>
+    <textarea id="input" placeholder="ID,Type,SKU,Name,Published,Short description,Description,Regular price,..."></textarea>
+
+    <div class="controls" style="margin-top:14px;">
+      <div class="field">
+        <label for="opt-minwords">Minimum description words</label>
+        <input type="number" id="opt-minwords" value="20" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="opt-status">Only this status (optional)</label>
+        <input type="text" id="opt-status" placeholder="published or draft">
+      </div>
+    </div>
+    <div class="buttons">
+      <button type="button" class="primary" id="run">Run</button>
+      <button type="button" class="secondary" id="sample">Load sample</button>
+      <button type="button" class="accent" id="download" disabled>Download report</button>
+    </div>
+    <label for="output">Report</label>
+    <pre id="output">Your report will appear here.</pre>
+    <p class="hint">Checks for a column are skipped when that column is absent from the export, like the CLI.</p>
+  </div>
+</main>
+<footer>
+  <div class="wrap">
+    <p>Built by AamirTechs. <a href="https://aamirtechs.github.io/">All tools</a> | <a href="https://github.com/aamirtechs/woo-product-doctor">Source</a></p>
+    <p>Privacy: this tool runs 100% in your browser. Nothing is uploaded.</p>
+  </div>
+</footer>
+<script id="core">
+// woo-product-doctor core logic: a faithful port of woo_product_doctor.py.
+// Pure functions only, no DOM access. Money is integer cents (BigInt),
+// matching the Python Decimal cents arithmetic.
+// window.runTool(inputText, options) returns the CLI text report.
+// options: { minWords: 20, status: "" (optional status filter),
+//            source: "input" (label shown on the first report line) }
+"use strict";
+
+var CHECKS = [
+  "duplicate sku",
+  "missing sku",
+  "missing image",
+  "placeholder image",
+  "missing description",
+  "thin description",
+  "missing or zero price",
+  "variation missing price",
+  "sale above regular price",
+  "negative price",
+  "invalid gtin",
+  "duplicate gtin",
+  "uncategorised product"
+];
+var COLUMN_ALIASES = {
+  id: ["id", "product id", "product_id"],
+  name: ["name", "product name", "title"],
+  type: ["type", "product type"],
+  published: ["published", "status", "product status"],
+  sku: ["sku"],
+  short_description: ["short description", "short_description", "excerpt"],
+  description: ["description", "long description", "product description"],
+  regular_price: ["regular price", "regular_price", "price"],
+  sale_price: ["sale price", "sale_price"],
+  categories: ["categories", "category", "product categories"],
+  images: ["images", "image", "product images", "image url"],
+  gtin: ["gtin", "barcode", "ean", "upc", "gtin-8", "gtin-12", "gtin-13", "gtin-14",
+         "meta: _gtin", "meta: gtin", "meta: _barcode", "meta: barcode"]
+};
+var PLACEHOLDER_HOSTS = {
+  "placehold.co": true, "placehold.it": true, "via.placeholder.com": true,
+  "dummyimage.com": true, "picsum.photos": true, "loremflickr.com": true,
+  "placekitten.com": true
+};
+var GTIN_LENGTHS = { 8: true, 12: true, 13: true, 14: true };
+var PRICED_TYPES = { simple: true, external: true };
+var SKU_ERROR_TYPES = { simple: true, external: true };
+
+function InputError(message) { this.message = message; }
+InputError.prototype = Object.create(Error.prototype);
+
+function pyRepr(value) {
+  if (value === null || value === undefined) return "None";
+  var s = String(value);
+  var quote = "'";
+  if (s.indexOf("'") !== -1 && s.indexOf('"') === -1) quote = '"';
+  var out = quote;
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    var code = s.charCodeAt(i);
+    if (ch === "\\") out += "\\\\";
+    else if (ch === quote) out += "\\" + quote;
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (code < 32 || code === 127) {
+      var hex = code.toString(16);
+      out += "\\x" + (hex.length < 2 ? "0" + hex : hex);
+    } else out += ch;
+  }
+  return out + quote;
+}
+
+function parseCSVRows(text) {
+  var rows = [];
+  var row = [];
+  var field = "";
+  var inQuotes = false;
+  var fieldStarted = false;
+  var lineHasContent = false;
+  var i = 0;
+  function endField() { row.push(field); field = ""; fieldStarted = false; }
+  function endRow() {
+    endField();
+    if (lineHasContent || row.length > 1 || row[0] !== "") rows.push(row);
+    row = [];
+    lineHasContent = false;
+  }
+  while (i < text.length) {
+    var ch = text.charAt(i);
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text.charAt(i + 1) === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += ch; i++; continue;
+    }
+    if (ch === '"' && !fieldStarted && field === "") {
+      inQuotes = true; fieldStarted = true; lineHasContent = true; i++; continue;
+    }
+    if (ch === ",") { endField(); lineHasContent = true; i++; continue; }
+    if (ch === "\r") {
+      if (text.charAt(i + 1) === "\n") i++;
+      endRow(); i++; continue;
+    }
+    if (ch === "\n") { endRow(); i++; continue; }
+    field += ch; fieldStarted = true; lineHasContent = true; i++;
+  }
+  if (field !== "" || fieldStarted || row.length > 0 || lineHasContent) endRow();
+  return rows;
+}
+
+function decimalToCents(text) {
+  var m = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(text);
+  if (!m) return null;
+  var intPart = m[2] || "";
+  var fracPart = m[3] || "";
+  if (intPart === "" && fracPart === "") return null;
+  var digits = (intPart + fracPart).replace(/^0+(?=\d)/, "");
+  var exp = (m[4] ? parseInt(m[4], 10) : 0) - fracPart.length + 2;
+  var cents;
+  var d = BigInt(digits === "" ? "0" : digits);
+  if (exp >= 0) {
+    cents = d * (10n ** BigInt(exp));
+  } else {
+    var divisor = 10n ** BigInt(-exp);
+    var q = d / divisor;
+    var r = d % divisor;
+    if (r * 2n >= divisor) q += 1n;
+    cents = q;
+  }
+  if (m[1] === "-") cents = -cents;
+  return cents;
+}
+
+function parseMoney(value, field, label) {
+  if (typeof value !== "string") {
+    throw new InputError(label + ": " + field + " must be a number, got " + pyRepr(value));
+  }
+  var text = value.trim().replace(/,/g, "");
+  text = text.replace(/[$£€]/g, "");
+  text = text.trim();
+  if (!text) throw new InputError(label + ": " + field + " must not be empty");
+  var cents = decimalToCents(text);
+  if (cents === null) {
+    throw new InputError(label + ": " + field + " is not a valid amount: " + pyRepr(value));
+  }
+  return cents;
+}
+
+function parseOptionalMoney(value, field, label) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  return parseMoney(value, field, label);
+}
+
+function moneyStr(cents) {
+  var neg = cents < 0n;
+  var abs = neg ? -cents : cents;
+  var whole = abs / 100n;
+  var frac = abs % 100n;
+  return (neg ? "-" : "") + whole.toString() + "." + (frac < 10n ? "0" : "") + frac.toString();
+}
+
+function normalizePublished(raw) {
+  var text = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "published", "publish"].indexOf(text) !== -1) return "published";
+  if (["0", "false", "no", "draft"].indexOf(text) !== -1) return "draft";
+  if (text === "private" || text === "pending") return text;
+  return text || "published";
+}
+
+function normalizeType(raw) {
+  var text = String(raw).trim().toLowerCase();
+  return text || "simple";
+}
+
+function wordCount(text) {
+  var parts = String(text).split(/\s+/);
+  var n = 0;
+  parts.forEach(function(p) { if (p) n++; });
+  return n;
+}
+
+function splitCells(cell) {
+  if (cell === null || cell === undefined) return [];
+  return String(cell).split(",").map(function(p) { return p.trim(); })
+    .filter(function(p) { return p; });
+}
+
+function isPlaceholderImage(url) {
+  var lowered = String(url).trim().toLowerCase();
+  if (lowered.indexOf("placeholder") !== -1) return true;
+  var host = "";
+  var m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/.exec(lowered);
+  if (m) host = m[1];
+  else if (lowered.indexOf("//") === 0) host = lowered.slice(2).split(/[/?#]/)[0];
+  if (host.indexOf("www.") === 0) host = host.slice(4);
+  return !!PLACEHOLDER_HOSTS[host];
+}
+
+function gtinCheckDigit(body) {
+  var total = 0;
+  for (var i = 0; i < body.length; i++) {
+    var digit = body.charCodeAt(body.length - 1 - i) - 48;
+    total += digit * (i % 2 === 0 ? 3 : 1);
+  }
+  return (10 - (total % 10)) % 10;
+}
+
+function validateGtin(raw) {
+  if (raw === null || raw === undefined) return [null, null];
+  var text = String(raw).trim().replace(/ /g, "").replace(/-/g, "");
+  if (!text) return [null, null];
+  if (!/^\d+$/.test(text)) return [null, "GTIN must contain digits only"];
+  if (!GTIN_LENGTHS[text.length]) {
+    return [null, "GTIN must be 8, 12, 13, or 14 digits, got " + text.length + " digits"];
+  }
+  if (String(gtinCheckDigit(text.slice(0, -1))) !== text.charAt(text.length - 1)) {
+    return [null, "GTIN check digit does not match"];
+  }
+  return [text, null];
+}
+
+function resolveColumns(fieldnames) {
+  if (!fieldnames || fieldnames.length === 0) throw new InputError("CSV has no header row");
+  var lookup = {};
+  fieldnames.forEach(function(rawName) {
+    if (rawName === null || rawName === undefined) return;
+    lookup[String(rawName).trim().toLowerCase()] = rawName;
+  });
+  var resolved = {};
+  Object.keys(COLUMN_ALIASES).forEach(function(logical) {
+    var aliases = COLUMN_ALIASES[logical];
+    for (var i = 0; i < aliases.length; i++) {
+      if (Object.prototype.hasOwnProperty.call(lookup, aliases[i])) {
+        resolved[logical] = lookup[aliases[i]];
+        break;
+      }
+    }
+  });
+  var missing = [];
+  ["id", "name"].forEach(function(name) {
+    if (!(name in resolved)) missing.push(name);
+  });
+  if (missing.length) {
+    throw new InputError("missing required column(s): " + missing.join(", "));
+  }
+  return resolved;
+}
+
+function cellOf(row, columns, logical) {
+  var rawName = columns[logical];
+  if (rawName === undefined) return null;
+  var v = row[rawName];
+  return v === undefined ? null : v;
+}
+
+function normalizeProduct(row, columns, index) {
+  var label = "row " + index;
+  var idVal = cellOf(row, columns, "id");
+  var productId = (idVal || "").trim();
+  if (!productId) throw new InputError(label + ": missing required field 'id'");
+  label = "product " + productId;
+  var name = "";
+  if ("name" in columns) name = (cellOf(row, columns, "name") || "").trim();
+  if (!name) throw new InputError(label + ": missing required field 'name'");
+  var productType = "simple";
+  if ("type" in columns) productType = normalizeType(String(cellOf(row, columns, "type") || ""));
+  var published = "published";
+  if ("published" in columns) published = normalizePublished(String(cellOf(row, columns, "published") || ""));
+  var sku = "";
+  if ("sku" in columns) sku = (cellOf(row, columns, "sku") || "").trim();
+  var shortDescription = "";
+  if ("short_description" in columns) shortDescription = (cellOf(row, columns, "short_description") || "").trim();
+  var description = "";
+  if ("description" in columns) description = (cellOf(row, columns, "description") || "").trim();
+  var regularPrice = null;
+  if ("regular_price" in columns) {
+    regularPrice = parseOptionalMoney(cellOf(row, columns, "regular_price"), "regular_price", label);
+  }
+  var salePrice = null;
+  if ("sale_price" in columns) {
+    salePrice = parseOptionalMoney(cellOf(row, columns, "sale_price"), "sale_price", label);
+  }
+  var categories = [];
+  if ("categories" in columns) categories = splitCells(cellOf(row, columns, "categories"));
+  var images = [];
+  if ("images" in columns) images = splitCells(cellOf(row, columns, "images"));
+  var gtinRaw = "";
+  if ("gtin" in columns) gtinRaw = (cellOf(row, columns, "gtin") || "").trim();
+  return {
+    id: productId, name: name, type: productType, published: published,
+    sku: sku, short_description: shortDescription, description: description,
+    regular_price: regularPrice, sale_price: salePrice,
+    categories: categories, images: images, gtin_raw: gtinRaw,
+    columns_present: columns
+  };
+}
+
+function loadProducts(text) {
+  var clean = text.replace(/^\uFEFF+/, "");
+  var raw = parseCSVRows(clean);
+  var fieldnames = raw.length ? raw[0] : null;
+  var columns = resolveColumns(fieldnames);
+  var products = [];
+  for (var r = 1; r < raw.length; r++) {
+    var cells = raw[r];
+    var allBlank = cells.every(function(v) { return v === null || v === undefined || !String(v).trim(); });
+    if (allBlank) continue;
+    var obj = {};
+    fieldnames.forEach(function(name, idx) {
+      obj[name] = idx < cells.length ? cells[idx] : null;
+    });
+    products.push(normalizeProduct(obj, columns, r + 1));
+  }
+  return products;
+}
+
+function padRight(s, w) { s = String(s); while (s.length < w) s += " "; return s; }
+function padLeft(s, w) { s = String(s); while (s.length < w) s = " " + s; return s; }
+
+function auditProducts(products, minWords) {
+  var findings = [];
+  var seenSkus = {};
+  var seenGtins = {};
+  var statusCounts = {};
+  var typeCounts = {};
+  products.forEach(function(product) {
+    statusCounts[product.published] = (statusCounts[product.published] || 0) + 1;
+    typeCounts[product.type] = (typeCounts[product.type] || 0) + 1;
+    var productId = product.id;
+    var name = product.name;
+    var isPublished = product.published === "published";
+    var isVariation = product.type === "variation";
+    function add(check, severity, message) {
+      findings.push({ product_id: productId, name: name, check: check, severity: severity, message: message });
+    }
+    var sku = product.sku;
+    if ("sku" in product.columns_present) {
+      if (sku) {
+        var key = sku.toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(seenSkus, key)) {
+          add("duplicate sku", "error", "SKU " + sku + " appears more than once in the export");
+        } else {
+          seenSkus[key] = true;
+        }
+      } else {
+        add("missing sku", SKU_ERROR_TYPES[product.type] ? "error" : "warning", "product has no SKU");
+      }
+    }
+    if (!isVariation && ("images" in product.columns_present)) {
+      if (!product.images.length) {
+        add("missing image", isPublished ? "error" : "warning", "product has no image");
+      } else {
+        var placeholders = product.images.filter(isPlaceholderImage);
+        if (placeholders.length) {
+          add("placeholder image", isPublished ? "error" : "warning",
+            "image looks like a placeholder: " + placeholders[0]);
+        }
+      }
+    }
+    if (!isVariation && (("description" in product.columns_present) ||
+                         ("short_description" in product.columns_present))) {
+      var descriptionText = product.description || product.short_description;
+      if (!descriptionText) {
+        add("missing description", isPublished ? "error" : "warning",
+          "product has no description or short description");
+      } else if (wordCount(descriptionText) < minWords) {
+        var count = wordCount(descriptionText);
+        add("thin description", "warning",
+          "description has " + count + " word" + (count !== 1 ? "s" : "") +
+          ", below the " + minWords + " word threshold");
+      }
+    }
+    var regular = product.regular_price;
+    var sale = product.sale_price;
+    var hasPrices = "regular_price" in product.columns_present;
+    if (hasPrices && regular !== null && regular < 0n) {
+      add("negative price", "error", "regular price is negative: " + moneyStr(regular));
+    }
+    if (hasPrices && ("sale_price" in product.columns_present) && sale !== null && sale < 0n) {
+      add("negative price", "error", "sale price is negative: " + moneyStr(sale));
+    }
+    if (hasPrices && PRICED_TYPES[product.type]) {
+      if (regular === null || regular === 0n) {
+        add("missing or zero price", "error",
+          regular === null ? "product has no regular price" : "regular price is zero");
+      }
+    } else if (hasPrices && product.type === "variation") {
+      if (regular === null || regular === 0n) {
+        add("variation missing price", "error",
+          regular === null ? "variation has no regular price" : "variation regular price is zero");
+      }
+    }
+    if (hasPrices && regular !== null && regular > 0n && sale !== null && sale > regular) {
+      add("sale above regular price", "error",
+        "sale price " + moneyStr(sale) + " is above regular price " + moneyStr(regular));
+    }
+    var gtinResult = validateGtin(product.gtin_raw);
+    var gtin = gtinResult[0], problem = gtinResult[1];
+    if (problem !== null) {
+      add("invalid gtin", "error", "GTIN " + pyRepr(product.gtin_raw) + " is invalid: " + problem);
+    } else if (gtin !== null) {
+      if (Object.prototype.hasOwnProperty.call(seenGtins, gtin)) {
+        add("duplicate gtin", "error", "GTIN " + gtin + " appears more than once in the export");
+      } else {
+        seenGtins[gtin] = true;
+      }
+    }
+    if (!isVariation && ("categories" in product.columns_present)) {
+      var realCategories = product.categories.filter(function(cat) {
+        return cat.toLowerCase() !== "uncategorized";
+      });
+      if (!realCategories.length) {
+        add("uncategorised product", "warning", "product has no category");
+      }
+    }
+  });
+  var errors = 0, warnings = 0;
+  findings.forEach(function(f) { if (f.severity === "error") errors++; else warnings++; });
+  return {
+    min_words: minWords,
+    total_products: products.length,
+    status_counts: statusCounts,
+    type_counts: typeCounts,
+    findings: findings,
+    error_count: errors,
+    warning_count: warnings
+  };
+}
+
+function formatText(report, source) {
+  var lines = [];
+  lines.push("WooCommerce products audit: " + source);
+  lines.push("Description word threshold: " + report.min_words + " words");
+  lines.push("");
+  lines.push("Products: " + report.total_products + " total");
+  var statuses = Object.keys(report.status_counts).sort();
+  if (statuses.length) {
+    lines.push("Statuses: " + statuses.map(function(s) {
+      return s + ": " + report.status_counts[s];
+    }).join(", "));
+  }
+  var types = Object.keys(report.type_counts).sort();
+  if (types.length) {
+    lines.push("Types: " + types.map(function(s) {
+      return s + ": " + report.type_counts[s];
+    }).join(", "));
+  }
+  lines.push("");
+  lines.push("Findings: " + report.findings.length + " (" + report.error_count +
+             " errors, " + report.warning_count + " warnings)");
+  if (report.findings.length) {
+    lines.push("");
+    lines.push(padRight("Check", 26) + " " + padLeft("Errors", 6) + " " + padLeft("Warnings", 8));
+    CHECKS.forEach(function(check) {
+      var e = 0, w = 0;
+      report.findings.forEach(function(item) {
+        if (item.check === check) { if (item.severity === "error") e++; else w++; }
+      });
+      if (e || w) lines.push(padRight(check, 26) + " " + padLeft(e, 6) + " " + padLeft(w, 8));
+    });
+    lines.push("");
+    lines.push("Findings:");
+    report.findings.forEach(function(item) {
+      lines.push("[" + item.severity + "] product " + item.product_id + " (" + item.name + "): " + item.message);
+    });
+  }
+  return lines.join("\n") + "\n";
+}
+
+window.runTool = function(inputText, options) {
+  options = options || {};
+  var minWords = (options.minWords === undefined || options.minWords === null || options.minWords === "")
+    ? 20 : parseInt(options.minWords, 10);
+  if (isNaN(minWords) || minWords < 0) minWords = 20;
+  var products;
+  try {
+    products = loadProducts(String(inputText == null ? "" : inputText));
+  } catch (exc) {
+    if (exc instanceof InputError) return "error: " + exc.message + "\n";
+    throw exc;
+  }
+  if (options.status) {
+    var wanted = normalizePublished(String(options.status));
+    products = products.filter(function(p) { return p.published === wanted; });
+  }
+  var report = auditProducts(products, minWords);
+  var source = options.source ? String(options.source) : "input";
+  return formatText(report, source);
+};
+</script>
+<script>
+(function () {
+  var SAMPLE_TEXT = `ID,Type,SKU,Name,Published,Short description,Description,Regular price,Sale price,Categories,Images,GTIN
+101,simple,WID-001,Blue Widget,1,A sturdy blue widget for everyday use.,"This sturdy blue widget is built for everyday use around the home and the workshop, with a solid steel body and a comfortable grip that lasts for years.",19.99,,Tools > Widgets,https://example.com/images/blue-widget.jpg,5901234123457
+102,simple,WID-002,Red Gadget,1,A handy red gadget.,Short text here only a few words.,29.99,,Tools,https://example.com/images/red-gadget.jpg,036000291452
+103,simple,WID-001,Blue Widget Copy,1,Another blue widget.,"This is another blue widget with a full description that is long enough to pass the word threshold without any trouble at all for the store owner.",24.99,,Tools,https://example.com/images/blue-widget-copy.jpg,96385074
+104,simple,,Green Thing,1,A green thing.,"This green thing is a perfectly ordinary product with a description long enough to pass every check in the book today.",9.99,,Tools,https://example.com/images/green-thing.jpg,
+105,simple,WID-005,Yellow Doohickey,1,A yellow doohickey.,"This yellow doohickey is a fine product with a description that is long enough to pass the word threshold without any trouble.",,,Tools,https://example.com/images/yellow.jpg,
+106,simple,WID-006,Purple Gizmo,1,A purple gizmo.,"This purple gizmo is a fine product with a description that is long enough to pass the word threshold without any trouble.",0.00,,Tools,https://example.com/images/purple.jpg,
+107,simple,WID-007,Orange Widget,1,An orange widget.,"This orange widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",15.00,19.99,Tools,https://example.com/images/orange.jpg,
+108,simple,WID-008,Black Gadget,1,A black gadget.,"This black gadget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,,
+109,simple,WID-009,White Widget,1,A white widget.,"This white widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/woocommerce-placeholder.png,
+110,simple,WID-010,Grey Gizmo,1,,,12.50,,Tools,https://example.com/images/grey.jpg,
+111,simple,WID-011,Pink Thing,1,A pink thing.,"This pink thing is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,,https://example.com/images/pink.jpg,
+112,simple,WID-012,Brown Gadget,1,A brown gadget.,"This brown gadget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/brown.jpg,5901234123456
+113,simple,WID-013,Silver Widget,1,A silver widget.,"This silver widget is a fine product with a description that is long enough to pass the word threshold without any trouble.",12.50,,Tools,https://example.com/images/silver.jpg,5901234123457
+114,variable,WID-014,T-Shirt,1,A plain t-shirt.,"This plain t-shirt is a fine product with a description that is long enough to pass the word threshold without any trouble.",,,Clothing,https://example.com/images/tshirt.jpg,
+115,variation,WID-014-S,T-Shirt - Small,1,,,,,,,
+116,variation,,T-Shirt - Medium,1,,,14.99,,,,
+117,simple,WID-017,Draft Product,0,A draft product.,Short.,12.50,,Tools,,
+`;
+  var inputEl = document.getElementById("input");
+  var outputEl = document.getElementById("output");
+  var downloadBtn = document.getElementById("download");
+  var fileName = "";
+  var lastReport = "";
+
+  document.getElementById("file").addEventListener("change", function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    fileName = file.name;
+    var reader = new FileReader();
+    reader.onload = function () { inputEl.value = String(reader.result || ""); };
+    reader.readAsText(file);
+  });
+  document.getElementById("sample").addEventListener("click", function () {
+    inputEl.value = SAMPLE_TEXT;
+    fileName = "";
+  });
+  document.getElementById("run").addEventListener("click", function () {
+    var options = {
+      minWords: document.getElementById("opt-minwords").value,
+      status: document.getElementById("opt-status").value,
+      source: fileName || "input"
+    };
+    lastReport = window.runTool(inputEl.value, options);
+    outputEl.textContent = lastReport;
+    downloadBtn.disabled = false;
+  });
+  downloadBtn.addEventListener("click", function () {
+    if (!lastReport) return;
+    var blob = new Blob([lastReport], { type: "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = "woo-product-doctor-report.txt";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+</body>
+</html>

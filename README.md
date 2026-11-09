@@ -1,4 +1,5 @@
 # woo-product-doctor
+**Live tool:** https://aamirtechs.github.io/woo-product-doctor/ (runs in your browser, no install)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/aamirtechs/woo-product-doctor/blob/main/LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/aamirtechs/woo-product-doctor/issues)
 
